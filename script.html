@@ -1,0 +1,897 @@
+<script>
+"use strict";
+(function () {
+    // State
+    const appState = {
+        token: null,
+        user: null,
+        autoRefreshEnabled: false,
+        autoRefreshTimerId: null,
+        selectedTaskIds: new Set(),
+        currentTasks: [],
+        currentRecentTasks: [],
+        usersCache: [],
+        tasksDateFilter: { startDate: null, endDate: null },
+        dashboardDateFilter: { startDate: null, endDate: null }
+    };
+
+    // DOM Helpers
+    const qs = (sel, root = document) => root.querySelector(sel);
+    const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+    // Elements
+    const el = {
+        // Screens
+        loginScreen: qs('#loginForm'),
+        dashboardScreen: qs('#dashboard'),
+
+        // Login elements
+        loginForm: qs('#loginFormElement'),
+        email: qs('#email'),
+        password: qs('#password'),
+        passwordToggleBtn: qs('.toggle-password'),
+        emailError: qs('#emailError'),
+        passwordError: qs('#passwordError'),
+        loginError: qs('#loginError'),
+        loginBtn: qs('#loginBtn'),
+        pwdStrength: qs('#passwordStrength'),
+        pwdStrengthFill: qs('#passwordStrength .strength-fill'),
+
+        // Header
+        sessionIndicator: qs('#sessionIndicator'),
+        userAvatar: qs('#userAvatar'),
+        userName: qs('#userName'),
+        userRole: qs('#userRole'),
+        logoutBtn: qs('#logoutBtn'),
+        tasksTabLabel: qs('#tasksTabLabel'),
+        mobileTasksTabLabel: qs('#mobileTasksTabLabel'),
+        desktopNavTabs: qsa('.nav-tab'),
+        mobileNavTabs: qsa('.mobile-nav-tab'),
+        mobileMenuBtn: qs('#mobileMenuBtn'),
+        mobileNav: qs('#mobileNav'),
+
+        // Tabs content
+        dashboardTab: qs('#dashboardTab'),
+        tasksTab: qs('#tasksTab'),
+        usersTabPanel: qs('div#usersTab.tab-content'),
+
+        // Dashboard controls
+        autoRefreshBtn: qs('#autoRefreshBtn'),
+        startDate: qs('#startDate'),
+        endDate: qs('#endDate'),
+        applyDateFilter: qs('#applyDateFilter'),
+        clearDateFilter: qs('#clearDateFilter'),
+        totalTasks: qs('#totalTasks'),
+        pendingTasks: qs('#pendingTasks'),
+        inProgressTasks: qs('#inProgressTasks'),
+        completedTasks: qs('#completedTasks'),
+        overdueTasks: qs('#overdueTasks'),
+        recentTasksList: qs('#recentTasksList'),
+        addTaskBtn: qs('#addTaskBtn'),
+
+        // Tasks tab controls
+        tasksTitle: qs('#tasksTitle'),
+        tasksSubtitle: qs('#tasksSubtitle'),
+        allTasksList: qs('#allTasksList'),
+        tasksHeader: qs('#tasksHeader'),
+        selectAllTasks: qs('#selectAllTasks'),
+        bulkActions: qs('#bulkActions'),
+        bulkStatusBtn: qs('#bulkStatusBtn'),
+        bulkDeleteBtn: qs('#bulkDeleteBtn'),
+        selectedCount: qs('#selectedCount'),
+        createTaskBtn: qs('#createTaskBtn'),
+        searchTasks: qs('#searchTasks'),
+        statusFilter: qs('#statusFilter'),
+        priorityFilter: qs('#priorityFilter'),
+        tasksStartDate: qs('#tasksStartDate'),
+        tasksEndDate: qs('#tasksEndDate'),
+        applyTasksDateFilter: qs('#applyTasksDateFilter'),
+        clearTasksDateFilter: qs('#clearTasksDateFilter'),
+
+        // Users tab
+        usersList: qs('#usersList'),
+
+        // Task modal
+        taskModal: qs('#taskModal'),
+        modalTitle: qs('#modalTitle'),
+        closeModal: qs('#closeModal'),
+        taskForm: qs('#taskForm'),
+        taskTitle: qs('#taskTitle'),
+        taskDescription: qs('#taskDescription'),
+        titleCharCount: qs('#titleCharCount'),
+        descCharCount: qs('#descCharCount'),
+        taskAssignedTo: qs('#taskAssignedTo'),
+        taskDueDate: qs('#taskDueDate'),
+        taskPriority: qs('#taskPriority'),
+        taskStatus: qs('#taskStatus'),
+        titleError: qs('#titleError'),
+        descError: qs('#descError'),
+        assignError: qs('#assignError'),
+        dueDateError: qs('#dueDateError'),
+        cancelTask: qs('#cancelTask'),
+        saveTask: qs('#saveTask'),
+
+        // Bulk status modal
+        bulkStatusModal: qs('#bulkStatusModal'),
+        closeBulkModal: qs('#closeBulkModal'),
+        bulkTaskCount: qs('#bulkTaskCount'),
+        bulkStatus: qs('#bulkStatus'),
+        cancelBulkStatus: qs('#cancelBulkStatus'),
+        confirmBulkStatus: qs('#confirmBulkStatus'),
+
+        // Loading + toasts
+        loadingOverlay: qs('#loadingOverlay'),
+        loadingTitle: qs('#loadingTitle'),
+        loadingMessage: qs('#loadingMessage'),
+        toastContainer: qs('#toastContainer'),
+
+        // Debug
+        debugPanel: qs('#debugPanel'),
+        debugInfo: qs('#debugInfo'),
+    };
+
+    // Utilities
+    function setOnline(isOnline) {
+        if (!el.sessionIndicator) return;
+        const icon = el.sessionIndicator.querySelector('i');
+        const text = el.sessionIndicator.querySelector('span');
+        if (isOnline) {
+            icon.classList.add('online');
+            text.textContent = 'Online';
+        } else {
+            icon.classList.remove('online');
+            text.textContent = 'Offline';
+        }
+    }
+
+    function showLoading(title = 'Loading...', message = 'Please wait while we process your request') {
+        if (!el.loadingOverlay) return;
+        el.loadingTitle.textContent = title;
+        el.loadingMessage.textContent = message;
+        el.loadingOverlay.style.display = 'flex';
+    }
+
+    function hideLoading() {
+        if (!el.loadingOverlay) return;
+        el.loadingOverlay.style.display = 'none';
+    }
+
+    function showToast(type, message) {
+        if (!el.toastContainer) return;
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        el.toastContainer.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('visible'));
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        }, 3500);
+    }
+
+    function saveSession(token, user) {
+        appState.token = token;
+        appState.user = user;
+        localStorage.setItem('tf_token', token);
+        localStorage.setItem('tf_user', JSON.stringify(user));
+    }
+
+    function clearSession() {
+        appState.token = null;
+        appState.user = null;
+        localStorage.removeItem('tf_token');
+        localStorage.removeItem('tf_user');
+        appState.selectedTaskIds.clear();
+    }
+
+    function restoreSession() {
+        const token = localStorage.getItem('tf_token');
+        const userRaw = localStorage.getItem('tf_user');
+        if (token && userRaw) {
+            try {
+                const user = JSON.parse(userRaw);
+                appState.token = token;
+                appState.user = user;
+                return true;
+            } catch (e) {
+                clearSession();
+            }
+        }
+        return false;
+    }
+
+    function isAdmin() {
+        return appState.user && appState.user.role === 'admin';
+    }
+
+    function formatDate(dateStr) {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (Number.isNaN(d.getTime())) return dateStr;
+        return d.toISOString().split('T')[0];
+    }
+
+    function toTitle(text) {
+        if (!text) return '';
+        return String(text).replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // API wrapper
+    function api(action, data = {}, opts = {}) {
+        const { loader = false, title = 'Loading...', message = 'Please wait...' } = opts;
+        return new Promise((resolve) => {
+            if (loader) showLoading(title, message);
+            if (typeof google === 'undefined' || !google.script || !google.script.run) {
+                // Fallback for local preview environments
+                setOnline(false);
+                if (loader) hideLoading();
+                showToast('error', 'Not running in Apps Script environment');
+                resolve({ success: false, message: 'Not in Apps Script env' });
+                return;
+            }
+            setOnline(true);
+            google.script.run
+                .withSuccessHandler(function (res) {
+                    if (loader) hideLoading();
+                    resolve(res);
+                })
+                .withFailureHandler(function (err) {
+                    if (loader) hideLoading();
+                    setOnline(false);
+                    showToast('error', 'Request failed');
+                    resolve({ success: false, message: String(err) });
+                })
+                .handleRequest(action, data, appState.token);
+        });
+    }
+
+    // UI
+    function showLogin() {
+        el.loginScreen.style.display = 'block';
+        el.dashboardScreen.style.display = 'none';
+    }
+
+    function showDashboard() {
+        el.loginScreen.style.display = 'none';
+        el.dashboardScreen.style.display = 'block';
+    }
+
+    function updateUserHeader() {
+        if (!appState.user) return;
+        el.userName.textContent = appState.user.name || '';
+        el.userRole.textContent = toTitle(appState.user.role || '');
+        el.userAvatar.src = appState.user.avatar || 'https://www.gravatar.com/avatar/?d=mp&s=80';
+        const adminNavBtn = document.querySelector('button.nav-tab[data-tab="users"]');
+        const adminMobileNavBtn = qs('#mobileUsersTab');
+        const adminOnlyButtons = [el.addTaskBtn, el.createTaskBtn];
+        const showAdmin = isAdmin();
+        if (adminNavBtn) adminNavBtn.style.display = showAdmin ? '' : 'none';
+        if (adminMobileNavBtn) adminMobileNavBtn.style.display = showAdmin ? '' : 'none';
+        adminOnlyButtons.forEach(btn => { if (btn) btn.style.display = showAdmin ? '' : 'none'; });
+        if (el.tasksTabLabel) el.tasksTabLabel.textContent = showAdmin ? 'Tasks' : 'My Tasks';
+        if (el.mobileTasksTabLabel) el.mobileTasksTabLabel.textContent = showAdmin ? 'Tasks' : 'My Tasks';
+        if (!showAdmin) {
+            el.tasksHeader && (el.tasksHeader.style.display = 'none');
+            el.bulkActions && (el.bulkActions.style.display = 'none');
+        }
+    }
+
+    function setActiveTab(tabName) {
+        // Header buttons
+        qsa('.nav-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        qsa('.mobile-nav-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        // Panels
+        const panels = [el.dashboardTab, el.tasksTab, el.usersTabPanel];
+        panels.forEach(panel => {
+            if (!panel) return;
+            const isTarget = panel.id === (tabName + 'Tab');
+            panel.classList.toggle('active', isTarget);
+        });
+    }
+
+    function computePasswordStrength(pwd) {
+        if (!pwd) return 0;
+        let score = 0;
+        if (pwd.length >= 6) score += 1;
+        if (pwd.length >= 10) score += 1;
+        if (/[A-Z]/.test(pwd)) score += 1;
+        if (/[0-9]/.test(pwd)) score += 1;
+        if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
+        return Math.min(score, 5);
+    }
+
+    function updatePasswordStrength() {
+        const pwd = el.password.value || '';
+        const strength = computePasswordStrength(pwd);
+        const pct = (strength / 5) * 100;
+        el.pwdStrength.style.display = pwd ? 'block' : 'none';
+        el.pwdStrengthFill.style.width = pct + '%';
+        el.pwdStrengthFill.style.backgroundColor = pct < 40 ? '#e74c3c' : pct < 70 ? '#f39c12' : '#2ecc71';
+    }
+
+    // Rendering
+    function statusBadge(status) {
+        const s = (status || 'pending').toLowerCase();
+        return `<span class="status-badge ${s}">${toTitle(s.replace('-', ' '))}</span>`;
+    }
+
+    function priorityBadge(priority) {
+        const p = (priority || 'medium').toLowerCase();
+        return `<span class="priority-badge ${p}">${toTitle(p)}</span>`;
+    }
+
+    function renderTaskItem(task, { withCheckbox = false, clickable = true } = {}) {
+        const checkboxHtml = withCheckbox ? `<label class="checkbox-container"><input type="checkbox" class="task-select" data-id="${task.id}"><span class="checkmark"></span></label>` : '';
+        const due = task.duedate ? formatDate(task.duedate) : '';
+        const assignee = appState.usersCache.find(u => String(u.id) === String(task.assignedto));
+        const assigneeName = assignee ? assignee.name : `User ${task.assignedto || ''}`;
+        const html = `
+            <div class="task-item" data-id="${task.id}">
+                <div class="task-left">
+                    ${checkboxHtml}
+                </div>
+                <div class="task-main">
+                    <div class="task-title-row">
+                        <h4>${escapeHtml(task.title || '')}</h4>
+                        <div class="task-badges">
+                            ${statusBadge(task.status)}
+                            ${priorityBadge(task.priority)}
+                        </div>
+                    </div>
+                    <div class="task-meta">
+                        <span><i class="fas fa-user"></i> ${escapeHtml(assigneeName)}</span>
+                        ${due ? `<span><i class="fas fa-calendar"></i> Due ${due}</span>` : ''}
+                        <span><i class="fas fa-hashtag"></i> ${task.id}</span>
+                    </div>
+                    ${task.description ? `<div class="task-desc">${escapeHtml(task.description)}</div>` : ''}
+                </div>
+                <div class="task-actions">
+                    ${isAdmin() || String(task.assignedto) === String(appState.user.id) ? `<button class="btn-icon edit-task" title="Edit"><i class="fas fa-edit"></i></button>` : ''}
+                    ${isAdmin() ? `<button class="btn-icon delete-task" title="Delete"><i class="fas fa-trash"></i></button>` : ''}
+                </div>
+            </div>
+        `;
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html.trim();
+        const node = wrapper.firstElementChild;
+        if (clickable) {
+            const editBtn = qs('.edit-task', node);
+            if (editBtn) editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openTaskModal({ mode: 'edit', task });
+            });
+            const delBtn = qs('.delete-task', node);
+            if (delBtn) delBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!confirm('Delete this task?')) return;
+                const res = await api('deleteTask', { id: task.id }, { loader: true, title: 'Deleting task' });
+                if (res && res.success) {
+                    showToast('success', 'Task deleted');
+                    await refreshTasksTab();
+                    await refreshDashboard();
+                } else {
+                    showToast('error', res.message || 'Delete failed');
+                }
+            });
+        }
+        if (withCheckbox) {
+            const checkbox = qs('input.task-select', node);
+            checkbox.addEventListener('change', () => {
+                const id = String(task.id);
+                if (checkbox.checked) appState.selectedTaskIds.add(id); else appState.selectedTaskIds.delete(id);
+                updateBulkActionsVisibility();
+            });
+        }
+        return node;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function renderRecentTasks(tasks) {
+        el.recentTasksList.innerHTML = '';
+        if (!tasks || tasks.length === 0) {
+            el.recentTasksList.innerHTML = '<div class="empty">No tasks to show</div>';
+            return;
+        }
+        // Sort by updatedat or duedate desc
+        const sorted = [...tasks].sort((a, b) => new Date(b.updatedat || b.duedate || 0) - new Date(a.updatedat || a.duedate || 0)).slice(0, 10);
+        sorted.forEach(t => el.recentTasksList.appendChild(renderTaskItem(t, { withCheckbox: false })));
+    }
+
+    function renderAllTasks(tasks) {
+        el.allTasksList.innerHTML = '';
+        if (!tasks || tasks.length === 0) {
+            el.allTasksList.innerHTML = '<div class="empty">No tasks found</div>';
+            return;
+        }
+        const withCheckbox = isAdmin();
+        tasks.forEach(t => el.allTasksList.appendChild(renderTaskItem(t, { withCheckbox })));
+        if (withCheckbox) {
+            el.tasksHeader.style.display = '';
+        } else {
+            el.tasksHeader.style.display = 'none';
+        }
+    }
+
+    function updateStatsUI(stats) {
+        el.totalTasks.textContent = stats.total || 0;
+        el.pendingTasks.textContent = stats.pending || 0;
+        el.inProgressTasks.textContent = stats.inProgress || 0;
+        el.completedTasks.textContent = stats.completed || 0;
+        el.overdueTasks.textContent = stats.overdue || 0;
+    }
+
+    // Filters
+    function getDashboardDateRange() {
+        const start = el.startDate.value || null;
+        const end = el.endDate.value || null;
+        return { startDate: start, endDate: end };
+    }
+
+    function getTasksDateRange() {
+        const start = el.tasksStartDate.value || null;
+        const end = el.tasksEndDate.value || null;
+        return { startDate: start, endDate: end };
+    }
+
+    function clientFilterTasks(tasks) {
+        const q = (el.searchTasks.value || '').toLowerCase().trim();
+        const status = el.statusFilter.value || 'all';
+        const priority = el.priorityFilter.value || 'all';
+        let filtered = tasks;
+        if (q) {
+            filtered = filtered.filter(t =>
+                (t.title || '').toLowerCase().includes(q) ||
+                (t.description || '').toLowerCase().includes(q) ||
+                String(t.id || '').includes(q)
+            );
+        }
+        if (status !== 'all') filtered = filtered.filter(t => (t.status || '').toLowerCase() === status);
+        if (priority !== 'all') filtered = filtered.filter(t => (t.priority || '').toLowerCase() === priority);
+        return filtered;
+    }
+
+    // Data fetchers
+    async function refreshDashboard() {
+        const { startDate, endDate } = getDashboardDateRange();
+        const statsRes = await api('getTaskStats', { startDate, endDate }, { loader: true, title: 'Loading dashboard' });
+        if (statsRes && statsRes.success) {
+            updateStatsUI(statsRes.data || {});
+        } else {
+            showToast('error', (statsRes && statsRes.message) || 'Failed to load stats');
+        }
+
+        const listAction = isAdmin() ? 'getTasks' : 'getUserTasks';
+        const listPayload = Object.assign({}, { startDate, endDate });
+        const tasksRes = await api(listAction, listPayload);
+        if (tasksRes && tasksRes.success) {
+            appState.currentRecentTasks = tasksRes.data || [];
+            renderRecentTasks(appState.currentRecentTasks);
+        } else {
+            el.recentTasksList.innerHTML = '<div class="empty">Failed to load tasks</div>';
+        }
+    }
+
+    async function refreshTasksTab() {
+        const { startDate, endDate } = getTasksDateRange();
+        const listAction = isAdmin() ? 'getTasks' : 'getUserTasks';
+        const listPayload = Object.assign({}, { startDate, endDate });
+        const res = await api(listAction, listPayload, { loader: true, title: 'Loading tasks' });
+        if (res && res.success) {
+            appState.currentTasks = res.data || [];
+            const filtered = clientFilterTasks(appState.currentTasks);
+            renderAllTasks(filtered);
+            appState.selectedTaskIds.clear();
+            updateBulkActionsVisibility();
+        } else {
+            showToast('error', (res && res.message) || 'Failed to load tasks');
+            el.allTasksList.innerHTML = '<div class="empty">Failed to load tasks</div>';
+        }
+    }
+
+    async function refreshUsersTab() {
+        if (!isAdmin()) {
+            el.usersList.innerHTML = '<div class="empty">Admin access required</div>';
+            return;
+        }
+        const res = await api('getUsers', {}, { loader: true, title: 'Loading users' });
+        if (res && res.success) {
+            appState.usersCache = res.data || [];
+            renderUsers(appState.usersCache);
+        } else {
+            el.usersList.innerHTML = '<div class="empty">Failed to load users</div>';
+        }
+    }
+
+    function renderUsers(users) {
+        el.usersList.innerHTML = '';
+        if (!users || users.length === 0) {
+            el.usersList.innerHTML = '<div class="empty">No users found</div>';
+            return;
+        }
+        const frag = document.createDocumentFragment();
+        users.forEach(u => {
+            const node = document.createElement('div');
+            node.className = 'user-card';
+            node.innerHTML = `
+                <img src="${escapeHtml(u.avatar || '')}" alt="${escapeHtml(u.name || '')}">
+                <div class="user-meta">
+                    <div class="name">${escapeHtml(u.name || '')}</div>
+                    <div class="email">${escapeHtml(u.email || '')}</div>
+                    <div class="role ${u.role}">${toTitle(u.role || '')}</div>
+                </div>
+            `;
+            frag.appendChild(node);
+        });
+        el.usersList.appendChild(frag);
+    }
+
+    // Bulk actions
+    function updateBulkActionsVisibility() {
+        const count = appState.selectedTaskIds.size;
+        if (!isAdmin()) {
+            el.bulkActions.style.display = 'none';
+            return;
+        }
+        el.bulkActions.style.display = count > 0 ? '' : 'none';
+        el.selectedCount.textContent = `${count} selected`;
+        if (el.selectAllTasks) {
+            const allCheckboxes = qsa('input.task-select');
+            const allChecked = allCheckboxes.length > 0 && allCheckboxes.every(cb => cb.checked);
+            el.selectAllTasks.checked = allChecked;
+        }
+    }
+
+    function openBulkStatusModal() {
+        el.bulkTaskCount.textContent = appState.selectedTaskIds.size;
+        el.bulkStatus.value = '';
+        el.bulkStatusModal.style.display = 'flex';
+    }
+
+    function closeBulkStatusModal() {
+        el.bulkStatusModal.style.display = 'none';
+    }
+
+    async function applyBulkStatus() {
+        const status = el.bulkStatus.value;
+        if (!status) {
+            showToast('error', 'Select a new status');
+            return;
+        }
+        const taskIds = Array.from(appState.selectedTaskIds);
+        const res = await api('bulkUpdateTasks', { taskIds, updates: { status } }, { loader: true, title: 'Updating tasks' });
+        if (res && res.success) {
+            showToast('success', res.message || 'Tasks updated');
+        } else {
+            showToast('error', (res && res.message) || 'Bulk update failed');
+        }
+        closeBulkStatusModal();
+        await refreshTasksTab();
+        await refreshDashboard();
+    }
+
+    async function applyBulkDelete() {
+        const count = appState.selectedTaskIds.size;
+        if (count === 0) return;
+        if (!confirm(`Delete ${count} selected task(s)?`)) return;
+        const taskIds = Array.from(appState.selectedTaskIds);
+        const res = await api('bulkDeleteTasks', { taskIds }, { loader: true, title: 'Deleting tasks' });
+        if (res && res.success) {
+            showToast('success', res.message || 'Tasks deleted');
+        } else {
+            showToast('error', (res && res.message) || 'Bulk delete failed');
+        }
+        await refreshTasksTab();
+        await refreshDashboard();
+    }
+
+    // Task modal
+    let taskModalState = { mode: 'create', taskId: null };
+
+    function resetTaskForm() {
+        el.taskForm.reset();
+        el.titleCharCount.textContent = '0/200';
+        el.descCharCount.textContent = '0/2000';
+        el.titleError.textContent = '';
+        el.descError.textContent = '';
+        el.assignError.textContent = '';
+        el.dueDateError.textContent = '';
+    }
+
+    async function ensureUsersCache() {
+        if (!isAdmin()) return;
+        if (appState.usersCache && appState.usersCache.length > 0) return;
+        const res = await api('getUsers', {}, { loader: true, title: 'Loading users' });
+        if (res && res.success) appState.usersCache = res.data || [];
+    }
+
+    async function openTaskModal({ mode, task }) {
+        taskModalState.mode = mode;
+        taskModalState.taskId = task ? task.id : null;
+        resetTaskForm();
+        el.modalTitle.textContent = mode === 'create' ? 'Create New Task' : `Edit Task #${task?.id || ''}`;
+
+        // Populate users for admin
+        el.taskAssignedTo.innerHTML = '<option value="">Select user</option>';
+        if (isAdmin()) {
+            await ensureUsersCache();
+            appState.usersCache.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = String(u.id);
+                opt.textContent = `${u.name} (${u.email})`;
+                el.taskAssignedTo.appendChild(opt);
+            });
+        } else {
+            // non-admin cannot create; but allow edit of own task assignment display
+            const selfOpt = document.createElement('option');
+            selfOpt.value = String(appState.user.id);
+            selfOpt.textContent = `${appState.user.name} (${appState.user.email})`;
+            el.taskAssignedTo.appendChild(selfOpt);
+            el.taskAssignedTo.disabled = true;
+        }
+
+        if (mode === 'edit' && task) {
+            el.taskTitle.value = task.title || '';
+            el.taskDescription.value = task.description || '';
+            el.taskAssignedTo.value = task.assignedto || '';
+            el.taskDueDate.value = task.duedate ? formatDate(task.duedate) : '';
+            el.taskPriority.value = (task.priority || 'medium').toLowerCase();
+            el.taskStatus.value = (task.status || 'pending').toLowerCase();
+            el.titleCharCount.textContent = `${el.taskTitle.value.length}/200`;
+            el.descCharCount.textContent = `${el.taskDescription.value.length}/2000`;
+        } else {
+            // Defaults
+            el.taskPriority.value = 'medium';
+            el.taskStatus.value = 'pending';
+        }
+
+        el.taskModal.style.display = 'flex';
+    }
+
+    function closeTaskModal() {
+        el.taskModal.style.display = 'none';
+        el.taskAssignedTo.disabled = false;
+    }
+
+    function validateTaskForm() {
+        let valid = true;
+        el.titleError.textContent = '';
+        el.descError.textContent = '';
+        el.assignError.textContent = '';
+        el.dueDateError.textContent = '';
+
+        const title = el.taskTitle.value.trim();
+        const desc = el.taskDescription.value.trim();
+        const assignedTo = el.taskAssignedTo.value;
+        const dueDate = el.taskDueDate.value;
+
+        if (!title) { el.titleError.textContent = 'Task title is required'; valid = false; }
+        if (!desc) { el.descError.textContent = 'Task description is required'; valid = false; }
+        if (!assignedTo) { el.assignError.textContent = 'Assign to is required'; valid = false; }
+        if (!dueDate) { el.dueDateError.textContent = 'Due date is required'; valid = false; }
+        return valid;
+    }
+
+    async function submitTaskForm(e) {
+        e.preventDefault();
+        if (!validateTaskForm()) return;
+        const payload = {
+            title: el.taskTitle.value.trim(),
+            description: el.taskDescription.value.trim(),
+            assignedTo: el.taskAssignedTo.value,
+            assignedBy: String(appState.user.id),
+            status: el.taskStatus.value,
+            priority: el.taskPriority.value,
+            dueDate: el.taskDueDate.value
+        };
+
+        if (taskModalState.mode === 'create') {
+            const res = await api('addTask', payload, { loader: true, title: 'Saving task' });
+            if (res && res.success) {
+                showToast('success', 'Task created');
+                closeTaskModal();
+                await refreshTasksTab();
+                await refreshDashboard();
+            } else {
+                showToast('error', (res && res.message) || 'Create failed');
+            }
+        } else {
+            // Edit
+            const updates = {
+                title: payload.title,
+                description: payload.description,
+                assignedTo: payload.assignedTo,
+                status: payload.status,
+                priority: payload.priority,
+                dueDate: payload.dueDate
+            };
+            const res = await api('updateTask', { id: taskModalState.taskId, updates }, { loader: true, title: 'Updating task' });
+            if (res && res.success) {
+                showToast('success', 'Task updated');
+                closeTaskModal();
+                await refreshTasksTab();
+                await refreshDashboard();
+            } else {
+                showToast('error', (res && res.message) || 'Update failed');
+            }
+        }
+    }
+
+    // Auth
+    function validEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    async function doLogin(e) {
+        e.preventDefault();
+        const email = el.email.value.trim();
+        const password = el.password.value;
+        el.emailError.textContent = '';
+        el.passwordError.textContent = '';
+        el.loginError.style.display = 'none';
+        el.loginError.textContent = '';
+
+        let ok = true;
+        if (!email || !validEmail(email)) { el.emailError.textContent = 'Enter a valid email'; ok = false; }
+        if (!password || password.length < 6) { el.passwordError.textContent = 'Password must be at least 6 characters'; ok = false; }
+        if (!ok) return;
+
+        const res = await api('login', { email, password }, { loader: true, title: 'Signing in' });
+        if (res && res.success && res.user && res.token) {
+            saveSession(res.token, res.user);
+            showDashboard();
+            updateUserHeader();
+            await Promise.all([
+                refreshUsersTab(),
+                refreshDashboard(),
+                refreshTasksTab()
+            ]);
+        } else {
+            el.loginError.style.display = 'block';
+            el.loginError.textContent = (res && res.message) || 'Login failed';
+        }
+    }
+
+    async function doLogout() {
+        if (appState.token) {
+            await api('logout', {}, { loader: true, title: 'Signing out' });
+        }
+        clearSession();
+        showLogin();
+        showToast('info', 'Logged out');
+    }
+
+    // Auto refresh
+    function setAutoRefresh(enabled) {
+        appState.autoRefreshEnabled = enabled;
+        const label = el.autoRefreshBtn.querySelector('span');
+        if (enabled) {
+            label.textContent = 'Auto-refresh: ON';
+            el.autoRefreshBtn.classList.add('active');
+            if (appState.autoRefreshTimerId) clearInterval(appState.autoRefreshTimerId);
+            appState.autoRefreshTimerId = setInterval(async () => {
+                await Promise.all([refreshDashboard(), refreshTasksTab()]);
+            }, 30000);
+        } else {
+            label.textContent = 'Auto-refresh: OFF';
+            el.autoRefreshBtn.classList.remove('active');
+            if (appState.autoRefreshTimerId) clearInterval(appState.autoRefreshTimerId);
+            appState.autoRefreshTimerId = null;
+        }
+    }
+
+    // Event wiring
+    function wireEvents() {
+        // Login
+        el.loginForm.addEventListener('submit', doLogin);
+        el.password.addEventListener('input', updatePasswordStrength);
+        if (el.passwordToggleBtn) {
+            el.passwordToggleBtn.addEventListener('click', () => {
+                el.password.type = el.password.type === 'password' ? 'text' : 'password';
+                const i = el.passwordToggleBtn.querySelector('i');
+                if (i) i.className = el.password.type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+            });
+        }
+
+        // Header
+        el.logoutBtn.addEventListener('click', doLogout);
+        el.autoRefreshBtn.addEventListener('click', () => setAutoRefresh(!appState.autoRefreshEnabled));
+        el.mobileMenuBtn.addEventListener('click', () => {
+            el.mobileNav.classList.toggle('open');
+        });
+
+        // Nav tabs (desktop and mobile)
+        const handleTabClick = (tab) => {
+            setActiveTab(tab);
+            if (tab === 'dashboard') refreshDashboard();
+            if (tab === 'tasks') refreshTasksTab();
+            if (tab === 'users') refreshUsersTab();
+        };
+        qsa('.nav-tab').forEach(btn => btn.addEventListener('click', () => handleTabClick(btn.dataset.tab)));
+        qsa('.mobile-nav-tab').forEach(btn => btn.addEventListener('click', () => {
+            handleTabClick(btn.dataset.tab);
+            el.mobileNav.classList.remove('open');
+        }));
+
+        // Dashboard filters
+        el.applyDateFilter.addEventListener('click', refreshDashboard);
+        el.clearDateFilter.addEventListener('click', () => {
+            el.startDate.value = '';
+            el.endDate.value = '';
+            refreshDashboard();
+        });
+
+        // Tasks filters and actions
+        el.applyTasksDateFilter.addEventListener('click', refreshTasksTab);
+        el.clearTasksDateFilter.addEventListener('click', () => {
+            el.tasksStartDate.value = '';
+            el.tasksEndDate.value = '';
+            refreshTasksTab();
+        });
+        ['input', 'change'].forEach(evt => {
+            el.searchTasks.addEventListener(evt, () => renderAllTasks(clientFilterTasks(appState.currentTasks)));
+            el.statusFilter.addEventListener(evt, () => renderAllTasks(clientFilterTasks(appState.currentTasks)));
+            el.priorityFilter.addEventListener(evt, () => renderAllTasks(clientFilterTasks(appState.currentTasks)));
+        });
+        if (el.selectAllTasks) {
+            el.selectAllTasks.addEventListener('change', () => {
+                const all = qsa('input.task-select');
+                appState.selectedTaskIds.clear();
+                all.forEach(cb => { cb.checked = el.selectAllTasks.checked; if (cb.checked) appState.selectedTaskIds.add(cb.dataset.id); });
+                updateBulkActionsVisibility();
+            });
+        }
+        if (el.bulkStatusBtn) el.bulkStatusBtn.addEventListener('click', openBulkStatusModal);
+        if (el.bulkDeleteBtn) el.bulkDeleteBtn.addEventListener('click', applyBulkDelete);
+
+        // Task modal buttons
+        if (el.addTaskBtn) el.addTaskBtn.addEventListener('click', () => openTaskModal({ mode: 'create' }));
+        if (el.createTaskBtn) el.createTaskBtn.addEventListener('click', () => openTaskModal({ mode: 'create' }));
+        el.closeModal.addEventListener('click', closeTaskModal);
+        el.cancelTask.addEventListener('click', closeTaskModal);
+        el.taskForm.addEventListener('submit', submitTaskForm);
+        el.taskTitle.addEventListener('input', () => { el.titleCharCount.textContent = `${el.taskTitle.value.length}/200`; });
+        el.taskDescription.addEventListener('input', () => { el.descCharCount.textContent = `${el.taskDescription.value.length}/2000`; });
+
+        // Bulk status modal buttons
+        el.closeBulkModal.addEventListener('click', closeBulkStatusModal);
+        el.cancelBulkStatus.addEventListener('click', closeBulkStatusModal);
+        el.confirmBulkStatus.addEventListener('click', applyBulkStatus);
+    }
+
+    async function boot() {
+        wireEvents();
+        // Default tab
+        setActiveTab('dashboard');
+        // Restore session if available
+        if (restoreSession()) {
+            showDashboard();
+            updateUserHeader();
+            // Validate session by fetching stats
+            const res = await api('getTaskStats', {}, { loader: true, title: 'Loading' });
+            if (res && res.success) {
+                await Promise.all([refreshUsersTab(), refreshDashboard(), refreshTasksTab()]);
+            } else {
+                clearSession();
+                showLogin();
+            }
+        } else {
+            showLogin();
+        }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', boot);
+})();
+</script>
