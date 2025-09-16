@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Task Manager</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <?!= include('styles'); ?>
+</head>
+<body>
+    <div id="app">
+        <!-- Login Form -->
+        <div id="loginForm" class="login-container">
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <h1>Enhanced Task Manager</h1>
+                    <p>Sign in to manage your tasks securely</p>
+                </div>
+                
+                <form id="loginFormElement">
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <div class="input-group">
+                            <i class="fas fa-envelope"></i>
+                            <input type="email" id="email" placeholder="Enter your email" required>
+                            <div class="validation-message" id="emailError"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="input-group">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="password" placeholder="Enter your password" required>
+                            <button type="button" class="toggle-password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <div class="validation-message" id="passwordError"></div>
+                        </div>
+                        <div class="password-strength" id="passwordStrength" style="display: none;">
+                            <div class="strength-bar">
+                                <div class="strength-fill"></div>
+                            </div>
+                            <span class="strength-text">Password Strength</span>
+                        </div>
+                    </div>
+                    
+                    <div id="loginError" class="error-message" style="display: none;"></div>
+                    
+                    <button type="submit" class="btn-primary" id="loginBtn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Sign In
+                    </button>
+                </form>
+                
+                <div class="demo-accounts">
+                    <h3>Demo Accounts:</h3>
+                    <div class="demo-grid">
+                        <div class="demo-account">
+                            <strong>Admin:</strong> admin@company.com
+                            <span>Password: admin123</span>
+                        </div>
+                        <div class="demo-account">
+                            <strong>User:</strong> john@company.com
+                            <span>Password: john123</span>
+                        </div>
+                        <div class="demo-account">
+                            <strong>User:</strong> sarah@company.com
+                            <span>Password: sarah123</span>
+                        </div>
+                        <div class="demo-account">
+                            <strong>User:</strong> mike@company.com
+                            <span>Password: mike123</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Dashboard -->
+        <div id="dashboard" style="display: none;">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-content">
+                    <div class="header-left">
+                        <div class="logo">
+                            <i class="fas fa-tasks"></i>
+                            <h1>TaskFlow</h1>
+                        </div>
+                        
+                        <!-- Desktop Navigation -->
+                        <nav class="nav-tabs desktop-nav" id="navTabs">
+                            <button class="nav-tab active" data-tab="dashboard">
+                                <i class="fas fa-chart-line"></i>
+                                Dashboard
+                            </button>
+                            <button class="nav-tab" data-tab="tasks">
+                                <i class="fas fa-list-check"></i>
+                                <span id="tasksTabLabel">Tasks</span>
+                            </button>
+                            <button class="nav-tab" data-tab="users" id="usersTab" style="display: none;">
+                                <i class="fas fa-users"></i>
+                                Users
+                            </button>
+                        </nav>
+                        
+                        <!-- Mobile Menu Button -->
+                        <button class="mobile-menu-btn" id="mobileMenuBtn">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="header-right">
+                        <div class="session-indicator" id="sessionIndicator">
+                            <i class="fas fa-circle online"></i>
+                            <span>Online</span>
+                        </div>
+                        <div class="user-info">
+                            <img id="userAvatar" src="" alt="User Avatar" class="user-avatar">
+                            <div class="user-details">
+                                <span id="userName"></span>
+                                <span id="userRole" class="user-role"></span>
+                            </div>
+                        </div>
+                        <button class="btn-logout" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Logout
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Mobile Navigation -->
+                <nav class="mobile-nav" id="mobileNav">
+                    <button class="mobile-nav-tab active" data-tab="dashboard">
+                        <i class="fas fa-chart-line"></i>
+                        Dashboard
+                    </button>
+                    <button class="mobile-nav-tab" data-tab="tasks">
+                        <i class="fas fa-list-check"></i>
+                        <span id="mobileTasksTabLabel">Tasks</span>
+                    </button>
+                    <button class="mobile-nav-tab" data-tab="users" id="mobileUsersTab" style="display: none;">
+                        <i class="fas fa-users"></i>
+                        Users
+                    </button>
+                </nav>
+            </header>
+            
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Dashboard Tab -->
+                <div id="dashboardTab" class="tab-content active">
+                    <div class="page-header">
+                        <div class="header-left">
+                            <h1 id="dashboardTitle">Dashboard</h1>
+                            <p id="dashboardSubtitle">Track your tasks and progress</p>
+                        </div>
+                        <button class="auto-refresh-btn" id="autoRefreshBtn" title="Toggle auto-refresh">
+                            <i class="fas fa-sync-alt"></i>
+                            <span>Auto-refresh: OFF</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Date Range Filter -->
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h3>Date Range Filter</h3>
+                        </div>
+                        <div class="date-range-filter">
+                            <div class="date-input-group">
+                                <label>From Date</label>
+                                <input type="date" id="startDate" class="date-input">
+                            </div>
+                            <div class="date-input-group">
+                                <label>To Date</label>
+                                <input type="date" id="endDate" class="date-input">
+                            </div>
+                            <button class="btn-secondary" id="applyDateFilter">
+                                <i class="fas fa-filter"></i>
+                                Apply Filter
+                            </button>
+                            <button class="btn-outline" id="clearDateFilter">
+                                <i class="fas fa-times"></i>
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Cards -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-content">
+                                <div class="stat-info">
+                                    <span class="stat-label">Total Tasks</span>
+                                    <span class="stat-value" id="totalTasks">0</span>
+                                </div>
+                                <div class="stat-icon total">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-content">
+                                <div class="stat-info">
+                                    <span class="stat-label">Pending</span>
+                                    <span class="stat-value pending" id="pendingTasks">0</span>
+                                </div>
+                                <div class="stat-icon pending">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-content">
+                                <div class="stat-info">
+                                    <span class="stat-label">In Progress</span>
+                                    <span class="stat-value progress" id="inProgressTasks">0</span>
+                                </div>
+                                <div class="stat-icon progress">
+                                    <i class="fas fa-spinner"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-content">
+                                <div class="stat-content">
+                                    <div class="stat-info">
+                                        <span class="stat-label">Completed</span>
+                                        <span class="stat-value completed" id="completedTasks">0</span>
+                                    </div>
+                                    <div class="stat-icon completed">
+                                        <i class="fas fa-check-circle"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-content">
+                                <div class="stat-info">
+                                    <span class="stat-label">Overdue</span>
+                                    <span class="stat-value overdue" id="overdueTasks">0</span>
+                                </div>
+                                <div class="stat-icon overdue">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Tasks -->
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h2>Recent Tasks</h2>
+                            <button class="btn-primary" id="addTaskBtn" style="display: none;">
+                                <i class="fas fa-plus"></i>
+                                Add Task
+                            </button>
+                        </div>
+                        <div id="recentTasksList" class="tasks-list"></div>
+                    </div>
+                </div>
+                
+                <!-- Tasks Tab -->
+                <div id="tasksTab" class="tab-content">
+                    <div class="page-header">
+                        <div class="header-left">
+                            <h1 id="tasksTitle">Tasks</h1>
+                            <p id="tasksSubtitle">Manage your tasks</p>
+                        </div>
+                        <div class="header-actions">
+                            <div class="bulk-actions" id="bulkActions" style="display: none;">
+                                <button class="btn-secondary" id="bulkStatusBtn">
+                                    <i class="fas fa-edit"></i>
+                                    Update Status
+                                </button>
+                                <button class="btn-danger" id="bulkDeleteBtn">
+                                    <i class="fas fa-trash"></i>
+                                    Delete Selected
+                                </button>
+                                <span class="selected-count" id="selectedCount">0 selected</span>
+                            </div>
+                            <button class="btn-primary" id="createTaskBtn" style="display: none;">
+                                <i class="fas fa-plus"></i>
+                                Create Task
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Enhanced Filters -->
+                    <div class="content-card">
+                        <div class="filters-container">
+                            <div class="filters-grid">
+                                <div class="filter-group">
+                                    <div class="input-group">
+                                        <i class="fas fa-search"></i>
+                                        <input type="text" id="searchTasks" placeholder="Search tasks...">
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <select id="statusFilter">
+                                        <option value="all">All Status</option>
+                                        <option value="pending">Pending</option>
+                                        <option value="in-progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                    </select>
+                                </div>
+                                <div class="filter-group">
+                                    <select id="priorityFilter">
+                                        <option value="all">All Priority</option>
+                                        <option value="high">High</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="low">Low</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="date-range-filter-tasks">
+                                <div class="date-input-group">
+                                    <label>From Date</label>
+                                    <input type="date" id="tasksStartDate" class="date-input">
+                                </div>
+                                <div class="date-input-group">
+                                    <label>To Date</label>
+                                    <input type="date" id="tasksEndDate" class="date-input">
+                                </div>
+                                <button class="btn-secondary" id="applyTasksDateFilter">
+                                    <i class="fas fa-filter"></i>
+                                    Apply
+                                </button>
+                                <button class="btn-outline" id="clearTasksDateFilter">
+                                    <i class="fas fa-times"></i>
+                                    Clear
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tasks List with Bulk Selection -->
+                    <div class="tasks-container">
+                        <div class="tasks-header" id="tasksHeader" style="display: none;">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="selectAllTasks">
+                                <span class="checkmark"></span>
+                                Select All
+                            </label>
+                        </div>
+                        <div id="allTasksList" class="tasks-list"></div>
+                    </div>
+                </div>
+                
+                <!-- Users Tab -->
+                <div id="usersTab" class="tab-content">
+                    <div class="page-header">
+                        <h1>Team Members</h1>
+                        <p>Manage team members and monitor their task assignments</p>
+                    </div>
+                    
+                    <div id="usersList" class="users-list"></div>
+                </div>
+            </main>
+        </div>
+        
+        <!-- Enhanced Task Modal -->
+        <div id="taskModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Create New Task</h2>
+                    <button class="modal-close" id="closeModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form id="taskForm">
+                    <div class="form-group">
+                        <label>Task Title *</label>
+                        <input type="text" id="taskTitle" placeholder="Enter task title" maxlength="200" required>
+                        <div class="char-count" id="titleCharCount">0/200</div>
+                        <div class="validation-message" id="titleError"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Description *</label>
+                        <textarea id="taskDescription" placeholder="Enter detailed task description" rows="4" maxlength="2000" required></textarea>
+                        <div class="char-count" id="descCharCount">0/2000</div>
+                        <div class="validation-message" id="descError"></div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Assign To *</label>
+                            <select id="taskAssignedTo" required>
+                                <option value="">Select user</option>
+                            </select>
+                            <div class="validation-message" id="assignError"></div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Due Date *</label>
+                            <input type="date" id="taskDueDate" required>
+                            <div class="validation-message" id="dueDateError"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Priority</label>
+                            <select id="taskPriority">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="taskStatus">
+                                <option value="pending" selected>Pending</option>
+                                <option value="in-progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="btn-secondary" id="cancelTask">Cancel</button>
+                        <button type="submit" class="btn-primary" id="saveTask">
+                            <i class="fas fa-save"></i>
+                            Save Task
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Bulk Status Update Modal -->
+        <div id="bulkStatusModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Update Status for Selected Tasks</h2>
+                    <button class="modal-close" id="closeBulkModal">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="modal-body">
+                    <p>Select new status for <span id="bulkTaskCount">0</span> selected tasks:</p>
+                    
+                    <div class="form-group">
+                        <label>New Status</label>
+                        <select id="bulkStatus" required>
+                            <option value="">Select status</option>
+                            <option value="pending">Pending</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="cancelBulkStatus">Cancel</button>
+                    <button type="button" class="btn-primary" id="confirmBulkStatus">
+                        <i class="fas fa-save"></i>
+                        Update Tasks
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading Overlay with Progress -->
+        <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+            <div class="loading-spinner">
+                <div class="spinner-ring"></div>
+                <div class="loading-text">
+                    <h3 id="loadingTitle">Loading...</h3>
+                    <p id="loadingMessage">Please wait while we process your request</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Success/Error Toast Messages -->
+        <div id="toastContainer" class="toast-container"></div>
+        
+        <!-- Debug Panel (only shown in development) -->
+        <div id="debugPanel" style="position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; max-width: 300px; z-index: 5000; display: none;">
+            <div><strong>Debug Info:</strong></div>
+            <div id="debugInfo"></div>
+            <button onclick="document.getElementById('debugPanel').style.display='none'" style="margin-top: 5px; background: #333; color: white; border: none; padding: 2px 5px; border-radius: 3px;">Hide</button>
+        </div>
+    </div>
+    
+    <?!= include('script'); ?>
+</body>
+</html>
